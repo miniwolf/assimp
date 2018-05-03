@@ -279,6 +279,9 @@ class MeshGeometry(id: Long, element: Element, name: String, doc: Document) : Ge
                     logger.error("ignoring additional normal layer")
                     return
                 }
+                if (normals.isEmpty()) {
+                    return
+                }
                 readVertexDataNormals(normals, source, mappingInformationType, referenceInformationType)
             }
             "LayerElementTangent" -> {
@@ -418,24 +421,28 @@ class MeshGeometry(id: Long, element: Element, name: String, doc: Document) : Ge
             dataOut.addAll(tempData)
         } else if (mappingInformationType == "ByPolygonVertex" && referenceInformationType == "IndexToDirect") {
             val tempData = ArrayList<T>()
-            getRequiredElement(source, dataElementName).parseVectorDataArray(tempData)
+            val element = getRequiredElement(source, dataElementName)
+            element.parseVectorDataArray(tempData)
 
-            val tempData2 = Array<T?>(tempData.size, { null })
+            val tempData2 = Array<T?>(vertexCount, { null })
 
             val uvIndices = ArrayList<Int>()
-            getRequiredElement(source, indexDataElementName).parseVectorDataArray(uvIndices)
+            getRequiredElement(source, indexDataElementName).parseIntsDataArray(uvIndices)
 
             if (uvIndices.size != vertexCount) {
                 logger.error("length of input data unexpected for ByPolygonVertex mapping")
                 return
             }
 
-            var next = 0
-            for (i in uvIndices) {
+            for ((next, i) in uvIndices.withIndex()) {
+                if (i == -1) {
+                    tempData2[next] = null
+                    continue
+                }
                 if (i >= tempData.size)
                     domError("index out of range", getRequiredElement(source, indexDataElementName))
 
-                tempData2[next++] = tempData[i]
+                tempData2[next] = tempData[i]
             }
             dataOut.addAll(tempData2.filterNotNull())
         } else

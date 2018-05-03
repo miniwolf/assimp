@@ -853,10 +853,12 @@ class Cluster(id: Long, element: Element, doc: Document, name: String) : Deforme
 
         if (indexes.isNotEmpty()) {
             indexes[0].parseIntsDataArray(indices)
-            weights[0].parseFloatsDataArray(this.weights)
+            if (this.weights.isNotEmpty()) {
+                weights[0].parseFloatsDataArray(this.weights)
+            }
         }
 
-        if (indices.size != weights.size) domError("sizes of index and weight array don't match up", element)
+        //if (indices.size != weights.size) domError("sizes of index and weight array don't match up", element)
 
         // read assigned node
         val conns = doc.getConnectionsByDestinationSequenced(id, "Model")

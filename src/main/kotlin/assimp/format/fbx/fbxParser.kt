@@ -42,7 +42,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package assimp.format.fbx
 
 import assimp.ASSIMP.DEBUG
+import assimp.AiColor4D
 import assimp.AiMatrix4x4
+import assimp.AiVector2D
 import assimp.AiVector3D
 import glm_.*
 import uno.buffer.bufferBig
@@ -144,7 +146,9 @@ class Element(val keyToken: Token, parser: Parser) {
     }
 
     inline fun <reified T> parseVectorDataArray(out: ArrayList<T>) = when (T::class) {
+        AiColor4D::class -> parseColor
         AiVector3D::class -> parseVec3DataArray(out as ArrayList<AiVector3D>)
+        AiVector2D::class -> parseVec2DataArray(out as ArrayList<AiVector2D>)
         else -> throw Error()
     }
 
@@ -260,6 +264,73 @@ class Element(val keyToken: Token, parser: Parser) {
 //
 //            out.push_back(ival)
 //        }
+    }
+
+
+    fun parseVec2DataArray(out: ArrayList<AiVector2D>) {
+        out.clear()
+
+        if (tokens.isEmpty()) {
+            parseError("unexpected empty element", this)
+        }
+
+        if (tokens[0].isBinary) {
+            begin = tokens[0].begin
+            val end = tokens[0].end
+
+            readBinaryDataArrayHead(::begin, end, ::type, ::count)
+
+            if (count % 2 != 0) {
+                parseError("number of floats is not a multiple of two (2) (binary)", this)
+            }
+
+            if (count == 0) {
+                return
+            }
+
+            if (type != 'd' && type != 'f') {
+                parseError("expected float or double array (binary)", this)
+            }
+
+            val buff = readBinaryDataArray(type, count, ::begin, end)
+            assert(begin == end) // read all data
+            assert(buff.size == count * (if (type == 'd') 8 else 4))
+
+            val count2 = count / 2
+            out.ensureCapacity(count2)
+
+            if (type == 'd') {
+                val d = buff.asDoubleBuffer()
+                for (i in 0 until count2) {
+                    out += AiVector2D(d.get(), d.get())
+                }
+            } else if (type == 'f') {
+                val f = buff.asFloatBuffer()
+                for (i in 0 until count2) {
+                    out += AiVector2D(f.get(), f.get())
+                }
+            }
+
+            return
+        }
+
+        val dim = tokens[0].parseAsDim
+
+        out.ensureCapacity(dim.i)
+
+        val a = getRequiredElement(scope, "a", this)
+
+        if (a.tokens.size % 2 != 0) {
+            parseError("number of float is not a multiple of two (2)", this)
+        }
+
+        var i = 0
+        while (i < a.tokens.size) {
+            out += AiVector2D(
+                    x = a.tokens[i++].parseAsFloat,
+                    y = a.tokens[i++].parseAsFloat
+            )
+        }
     }
 
     /** read an array of float3 tuples */

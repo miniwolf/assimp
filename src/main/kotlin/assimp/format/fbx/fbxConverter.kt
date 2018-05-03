@@ -42,7 +42,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package assimp.format.fbx
 
 import assimp.*
-import assimp.AiTexture.Type as Tt
 import assimp.format.md5.mat
 import gli_.has
 import glm_.d
@@ -53,6 +52,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.reflect.KMutableProperty0
+import assimp.AiTexture.Type as Tt
 import assimp.format.fbx.Converter.TransformationComp as Tc
 import assimp.format.fbx.FileGlobalSettings.FrameRate as Fr
 
@@ -723,7 +723,7 @@ class Converter(val out: AiScene, val doc: Document) {
             val uvs = mesh.getTextureCoords(i)
             if (uvs.isEmpty()) break
 
-            outMesh.textureCoords[i] = MutableList(vertices.size) { uvs[it].to(FloatArray(2)) }
+            outMesh.textureCoords.add(MutableList(vertices.size) { uvs[it].to(FloatArray(2)) })
         }
 
         // copy vertex colors
@@ -731,7 +731,7 @@ class Converter(val out: AiScene, val doc: Document) {
             val colors = mesh.getVertexColors(i)
             if (colors.isEmpty()) break
 
-            outMesh.colors[i] = MutableList(vertices.size) { AiColor4D(colors[it]) }
+            outMesh.colors.add(MutableList(vertices.size) { AiColor4D(colors[it]) })
         }
 
         if (!doc.settings.readMaterials || mIndices.isEmpty()) {
@@ -1032,7 +1032,7 @@ class Converter(val out: AiScene, val doc: Document) {
                 val outWeight = bone.weights[cursor++]
 
                 outWeight.vertexId = outIndices[indexIndex + j]
-                outWeight.weight = weights[i]
+                if (weights.isNotEmpty()) outWeight.weight = weights[i]
             }
         }
     }
