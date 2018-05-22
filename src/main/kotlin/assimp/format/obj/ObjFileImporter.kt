@@ -1,7 +1,6 @@
 package assimp.format.obj
 
 import assimp.*
-import gli_.gli
 import java.io.IOException
 
 /**
@@ -72,8 +71,8 @@ class ObjFileImporter : BaseImporter() {
         // Create all materials
         createMaterials(pModel, pScene)
 
-        if (ASSIMP_LOAD_TEXTURES)
-            loadTextures(pScene, ioSystem)
+//        if (ASSIMP_LOAD_TEXTURES)
+//            loadTextures(pScene, ioSystem)
     }
 
     /**  Creates all nodes of the model */
@@ -277,7 +276,7 @@ class ObjFileImporter : BaseImporter() {
                     throw Error("OBJ:" + pModel.m_ModelName + " | " + pMesh.name + " --> bad vertex index")
 
                 // Get destination face
-                val faceIndex = outIndex;
+                val faceIndex = outIndex
                 val pDestFace = pMesh.faces.getOrElse(faceIndex, { mutableListOf() })
 
                 val last = vertexIndex == pSourceFace.m_vertices.lastIndex
@@ -406,53 +405,53 @@ class ObjFileImporter : BaseImporter() {
     }
 
     /**  Load textures   */
-    fun loadTextures(scene: AiScene, ioSystem: IOSystem = this.ioSystem) {
-
-        scene.materials.forEach { mtl ->
-
-            mtl.textures.forEach { tex ->
-
-                val name = tex.file!!
-
-                if (!scene.textures.containsKey(name)) {
-
-                    var i = 0
-                    while (!name[i].isLetter()) i++
-                    val cleaned = name.substring(i) //  e.g: .\wal67ar_small.jpg -> wal67ar_small.jpg
-
-                    if(ioSystem is DefaultIOSystem) {
-
-                        //If the default io system is in place, we can use the java.io.File api and list directories
-                        //to match files even where case is mangled
-
-                        val actualFile = (ioSystem.open(file) as DefaultIOSystem.FileIOStream).path.toFile()
-
-                        when {
-                            actualFile.parentFile.listFiles().any { it.name == cleaned } -> {
-
-                                val texFile = actualFile.parentFile.listFiles().first { it.name == cleaned }!!
-                                scene.textures[name] = gli.load(texFile.toPath())
-
-                            }
-                            actualFile.parentFile.listFiles().any { it.name.toUpperCase() == cleaned.toUpperCase() } -> {
-                                // try case insensitive
-                                val texFile = actualFile.parentFile.listFiles().first { it.name.toUpperCase() == cleaned.toUpperCase() }!!
-                                scene.textures[name] = gli.load(texFile.toPath())
-
-                            }
-                            else -> logger.warn { "OBJ/MTL: Texture image not found --> $cleaned" }
-                        }
-                    } else {
-                        //no such luck with custom io systems i'm afraid
-                        //TODO gli load from bytebuf ?
-                    }
-
-                } else {
-                    logger.warn { "OBJ/MTL: Scene contains  --> $name already" }
-                }
-            }
-        }
-    }
+//    fun loadTextures(scene: AiScene, ioSystem: IOSystem = this.ioSystem) {
+//
+//        scene.materials.forEach { mtl ->
+//
+//            mtl.textures.forEach { tex ->
+//
+//                val name = tex.file!!
+//
+//                if (!scene.textures.containsKey(name)) {
+//
+//                    var i = 0
+//                    while (!name[i].isLetter()) i++
+//                    val cleaned = name.substring(i) //  e.g: .\wal67ar_small.jpg -> wal67ar_small.jpg
+//
+//                    if(ioSystem is DefaultIOSystem) {
+//
+//                        //If the default io system is in place, we can use the java.io.File api and list directories
+//                        //to match files even where case is mangled
+//
+//                        val actualFile = (ioSystem.open(file) as DefaultIOSystem.FileIOStream).path.toFile()
+//
+//                        when {
+//                            actualFile.parentFile.listFiles().any { it.name == cleaned } -> {
+//
+//                                val texFile = actualFile.parentFile.listFiles().first { it.name == cleaned }!!
+//                                scene.textures[name] = gli.load(texFile.toPath())
+//
+//                            }
+//                            actualFile.parentFile.listFiles().any { it.name.toUpperCase() == cleaned.toUpperCase() } -> {
+//                                // try case insensitive
+//                                val texFile = actualFile.parentFile.listFiles().first { it.name.toUpperCase() == cleaned.toUpperCase() }!!
+//                                scene.textures[name] = gli.load(texFile.toPath())
+//
+//                            }
+//                            else -> logger.warn { "OBJ/MTL: Texture image not found --> $cleaned" }
+//                        }
+//                    } else {
+//                        //no such luck with custom io systems i'm afraid
+//                        //TODO gli load from bytebuf ?
+//                    }
+//
+//                } else {
+//                    logger.warn { "OBJ/MTL: Scene contains  --> $name already" }
+//                }
+//            }
+//        }
+//    }
 }
 
 

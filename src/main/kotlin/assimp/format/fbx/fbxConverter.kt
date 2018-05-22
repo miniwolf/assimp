@@ -105,7 +105,7 @@ class Converter(val out: AiScene, val doc: Document) {
     /** The different parts that make up the final local transformation of a fbx-node     */
     enum class TransformationComp { Translation, RotationOffset, RotationPivot, PreRotation, Rotation, PostRotation,
         RotationPivotInverse, ScalingOffset, ScalingPivot, Scaling, ScalingPivotInverse, GeometricTranslation,
-        GeometricRotation, GeometricScaling;
+        GeometricRotation, GeometricScaling, GeometricScalingInverse, GeometricRotationInverse, GeometricTranslationInverse;
 
         val i = ordinal
 
@@ -175,6 +175,7 @@ class Converter(val out: AiScene, val doc: Document) {
         val nodes = ArrayList<AiNode>(conns.size)
 
         val nodesChain = ArrayList<AiNode>()
+        val postNodesChain = ArrayList<AiNode>()
 
         try {
             for (con in conns) {
@@ -191,13 +192,14 @@ class Converter(val out: AiScene, val doc: Document) {
 
                 if (model != null) {
                     nodesChain.clear()
+                    postNodesChain.clear()
 
                     val newAbsTransform = AiMatrix4x4(parentTransform)
 
                     /*  even though there is only a single input node, the design of assimp (or rather: the complicated
                         transformation chain that is employed by fbx) means that we may need multiple aiNode's to
                         represent a fbx node's transformation.  */
-                    generateTransformationNodeChain(model, nodesChain)
+                    generateTransformationNodeChain(model, nodesChain, postNodesChain)
 
                     assert(nodesChain.isNotEmpty())
 
@@ -431,10 +433,21 @@ class Converter(val out: AiScene, val doc: Document) {
         val props = model.props
 
         val zeroEpsilon = 1e-6f
+        val allOnes = AiVector3D(1.0f, 1.0f, 1.0f)
         Tc.values().filter {
-            it != Tc.Rotation && it != Tc.Scaling && it != Tc.Translation && it != Tc.GeometricScaling
-                    && it != Tc.GeometricRotation && it != Tc.GeometricTranslation
-        }.forEach { comp -> props<AiVector3D>(comp.nameProperty)?.let { if (it.squareLength > zeroEpsilon) return true } }
+            it != Tc.Rotation && it != Tc.Scaling && it != Tc.Translation
+        }.forEach { comp ->
+            props<AiVector3D>(comp.nameProperty)?.let {
+                if (comp == Tc.GeometricScaling) {
+                    if ((it - allOnes).squareLength() > zeroEpsilon) {
+                        return true
+                    }
+                }
+                if (it.squareLength > zeroEpsilon) {
+                    return true
+                }
+            }
+        }
         return false
     }
 
@@ -442,7 +455,7 @@ class Converter(val out: AiScene, val doc: Document) {
     fun nameTransformationChainNode(name: String, comp: Tc) = "$name${MAGIC_NODE_TAG}_${comp.name}"
 
     /** note: memory for output_nodes will be managed by the caller */
-    fun generateTransformationNodeChain(model: Model, outputNodes: ArrayList<AiNode>) {
+    fun generateTransformationNodeChain(model: Model, outputNodes: ArrayList<AiNode>, postOutputNodes: ArrayList<AiNode>) {
 
         val props = model.props
         val rot = model.rotationOrder
@@ -545,15 +558,28 @@ class Converter(val out: AiScene, val doc: Document) {
             var bit = 0x1
             for (comp in Tc.values()) {
 
-                if (!chain[comp].isIdentity || animChainBitmask has bit) {
-
-                    if (comp == Tc.PostRotation) chain[comp].inverseAssign()
-
-                    outputNodes += AiNode().apply {
-                        this.name = nameTransformationChainNode(name, comp)
-                        transformation put chain[comp]
-                    }
+                if (chain[comp].isIdentity && !(animChainBitmask has bit)) {
+                    bit = bit shl 1
+                    continue
                 }
+
+                if (comp == Tc.PostRotation) {
+                    chain[comp].inverseAssign()
+                }
+
+                val nd = AiNode().apply {
+                    this.name = nameTransformationChainNode(name, comp)
+                    transformation put chain[comp]
+                }
+
+                if (comp == Tc.GeometricScalingInverse
+                        || comp == Tc.GeometricRotationInverse
+                        || comp == Tc.GeometricTranslationInverse) {
+                    postOutputNodes += nd
+                } else {
+                    outputNodes += nd
+                }
+
                 bit = bit shl 1
             }
 
@@ -591,7 +617,7 @@ class Converter(val out: AiScene, val doc: Document) {
 
         val geos = model.geometry
 
-        val meshes = IntArray(geos.size)
+        var meshes = IntArray(0)
 
         for (geo in geos) {
 
@@ -599,7 +625,7 @@ class Converter(val out: AiScene, val doc: Document) {
             if (mesh != null) {
                 val indices = convertMesh(mesh, model, nodeGlobalTransform)
                 for (i in indices.indices)
-                    meshes[i] = indices[i]
+                    meshes += indices[i]
             } else
                 logger.warn("ignoring unrecognized geometry: ${geo.name}")
         }
@@ -755,7 +781,7 @@ class Converter(val out: AiScene, val doc: Document) {
         val indices = ArrayList<Int>()
 
         for (index in mIndices)
-            if (had.contains(index)) {
+            if (!had.contains(index)) {
                 indices += convertMeshMultiMaterial(mesh, model, index, nodeGlobalTransform)
                 had += index
             }
@@ -777,13 +803,17 @@ class Converter(val out: AiScene, val doc: Document) {
         var countVertices = 0
 
         // count faces
-        var itf = 0
-        for (it in mIndices) {
-            if (it != index) continue
+        var k = 0
+        while (k < mIndices.size) {
+            val it = mIndices[k]
+            if (it != index) {
+                k++
+                continue
+            }
 
             ++countFaces
-            countVertices += itf
-            ++itf
+            countVertices += faces[k]
+            k++
         }
 
         assert(countFaces != 0)
@@ -836,34 +866,33 @@ class Converter(val out: AiScene, val doc: Document) {
         }
 
         // allocate texture coords
-        var numUvs = 0
         for (i in 0 until AI_MAX_NUMBER_OF_TEXTURECOORDS) {
             val uvs = mesh.getTextureCoords(i)
             if (uvs.isEmpty()) break
 
-            outMesh.textureCoords[i] = MutableList(vertices.size, { FloatArray(2) })
-            ++numUvs
+            outMesh.textureCoords.add(MutableList(vertices.size) { FloatArray(2) })
         }
 
         // allocate vertex colors
-        var numVcs = 0
         for (i in 0 until AI_MAX_NUMBER_OF_COLOR_SETS) {
             val colors = mesh.getVertexColors(i)
             if (colors.isEmpty()) break
 
-            outMesh.colors[i] = MutableList(vertices.size, { AiColor4D() })
-            ++numVcs
+            outMesh.colors.add(MutableList(vertices.size) { AiColor4D() })
         }
 
         var cursor = 0
         var inCursor = 0
 
-        itf = -1
         var facIdx = 0
-        for (it in mIndices) {
-            val pCount = itf++
+        k = 0
+        while (k < mIndices.size) {
+            val pCount = faces[k]
+            val it = mIndices[k]
+
             if (it != index) {
                 inCursor += pCount
+                k++
                 continue
             }
 
@@ -893,18 +922,20 @@ class Converter(val out: AiScene, val doc: Document) {
                     outMesh.bitangents[cursor] = binormals[inCursor]
                 }
 
-                for (j in 0 until numUvs) {
+                for (j in 0 until outMesh.textureCoords.size) {
                     val uvs = mesh.getTextureCoords(j)
                     outMesh.textureCoords[j][cursor] = floatArrayOf(uvs[inCursor].x, uvs[inCursor].y)
                 }
 
-                for (j in 0 until numVcs) {
+                for (j in 0 until outMesh.colors.size) {
                     val cols = mesh.getVertexColors(j)
                     outMesh.colors[j][cursor] = cols[inCursor]
                 }
                 ++cursor
                 ++inCursor
             }
+
+            k++
         }
 
         convertMaterialForMesh(outMesh, model, mesh, index)
@@ -1139,22 +1170,19 @@ class Converter(val out: AiScene, val doc: Document) {
                     index = convertVideo(media)
                     texturesConverted[media] = index
                     textureReady = true
-                } else if (doc.settings.searchEmbeddedTextures) { //try to find the texture on the already-loaded textures by the filename, if the flag is on
-                    textureReady = findTextureIndexByFilename(media, ::_i)
-                    index = _i
                 }
             }
             // setup texture reference string (copied from ColladaLoader::FindFilenameForEffectTexture), if the texture is ready
-            if (textureReady)
-                path = "*$index"
+            if (doc.settings.searchEmbeddedTextures) { //try to find the texture on the already-loaded textures by the filename, if the flag is on
+                if (textureReady)
+                    path = "*$index"
+            }
         }
 
-        outMat.textures[0].apply {
-            file = path
-            type = target
-        }
+        val texture = AiMaterial.Texture(file = path, type = target)
+
         // XXX handle all kinds of UV transformations
-        outMat.textures[0].uvTrafo = AiUVTransform(scaling = tex.uvScaling, translation = tex.uvTrans)
+        texture.uvTrafo = AiUVTransform(scaling = tex.uvScaling, translation = tex.uvTrans)
 
         val props = tex.props
 
@@ -1220,7 +1248,8 @@ class Converter(val out: AiScene, val doc: Document) {
                 }
             }
         }
-        outMat.textures[0].uvwsrc = uvIndex
+        texture.uvwsrc = uvIndex
+        outMat.textures.add(texture)
     }
 
     fun trySetTextureProperties_(outMat: AiMaterial, layeredTextures: MutableMap<String, LayeredTexture>,
@@ -1401,7 +1430,7 @@ class Converter(val out: AiScene, val doc: Document) {
         outMat.shininess = props("ShininessExponent")
         // TransparentColor / TransparencyFactor... gee thanks FBX :rolleyes:
         var calculatedOpacity = 1f
-        getColorPropertyFactored(props, "TransparentColor", "TransparencyFactor")?.let {transparent ->
+        getColorPropertyFactored(props, "TransparentColor", "TransparencyFactor")?.let { transparent ->
             outMat.color.let {
                 if (it == null) outMat.color = AiMaterial.Color(transparent = transparent)
                 else it.transparent = transparent
@@ -1538,7 +1567,13 @@ class Converter(val out: AiScene, val doc: Document) {
                 val model = node.target as? Model ?: continue
 
                 val name = fixNodeName(model.name)
-                nodeMap[name]!!.add(node)
+                if (nodeMap.containsKey(name)) {
+                    nodeMap[name]?.add(node)
+                } else {
+                    val list = ArrayList<AnimationCurveNode>()
+                    list.add(node)
+                    nodeMap[name] = list
+                }
 
                 layerMap[node] = layer
             }
@@ -1625,7 +1660,8 @@ class Converter(val out: AiScene, val doc: Document) {
             nodePropertyMap.getOrPut(node.prop, { arrayListOf() }) += node
         }
 
-        curveNode!!
+        assert(curveNode != null)
+        assert(curveNode!!.targetAsModel != null)
         val target = curveNode.targetAsModel!!
 
         // check for all possible transformation components
@@ -2236,8 +2272,8 @@ class Converter(val out: AiScene, val doc: Document) {
         if (textures.isNotEmpty()) {
             out.textures.clear()
             out.numTextures = textures.size
+            out.textures.addAll(textures.values)
 //            out.textures.putAll(textures) TODO
-            TODO()
         }
     }
 

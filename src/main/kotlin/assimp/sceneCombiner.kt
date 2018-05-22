@@ -41,7 +41,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package assimp
 
-import gli_.Texture
 import gli_.has
 import kotlin.reflect.KMutableProperty0
 import assimp.AI_INT_MERGE_SCENE as Ms
@@ -187,12 +186,12 @@ object SceneCombiner {
             cnt = 0
             for (n in 0 until src.size) {
                 val cur = src[n]
-                for (entry in cur().textures)
+                for ((index, entry) in cur().textures.withIndex())
                     if (n != duplicates[n]) {
                         if (flags has Ms.DUPLICATES_DEEP_CPY)
-                            dest.textures[entry.key] = Texture(entry.value)
+                            dest.textures[index] = entry // TODO: Needs deepcopy
                         else continue
-                    } else dest.textures[entry.key] = entry.value
+                    } else dest.textures[index] = entry
                 offset[n] = cnt
                 cnt = dest.textures.size
             }

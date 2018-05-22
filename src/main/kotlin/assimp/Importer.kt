@@ -50,6 +50,7 @@ import java.io.File
 import java.net.URI
 import java.net.URL
 import java.nio.ByteBuffer
+import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import kotlin.reflect.KMutableProperty0
@@ -258,11 +259,11 @@ constructor() {
 
         // First check if the file is accessible at all
         // handled by exception in IOSystem
-        /*if (!file.exists()) {
+        if (!Files.exists(Paths.get(file))) {
             impl.errorString = "Unable to open file \"$file\"."
             logger.error { impl.errorString }
             return null
-        }*/
+        }
 
 //        TODO std::unique_ptr<Profiler> profiler(GetPropertyInteger(AI_CONFIG_GLOB_MEASURE_TIME,0)?new Profiler():NULL);
 //        if (profiler) {
@@ -613,75 +614,75 @@ constructor() {
      *  @param in Data structure to be filled.
      *  @note The returned memory statistics refer to the actual size of the use data of the AiScene. Heap-related
      *  overhead is (naturally) not included.*/
-    val memoryRequirements: AiMemoryInfo
-        get() {
-            val mem = AiMemoryInfo()
-            val scene = impl.scene ?: return mem
-            // return if we have no scene loaded
-            mem.total = AiScene.size
-            // add all meshes
-            repeat(scene.numMeshes) { i ->
-                mem.meshes += AiMesh.size
-                if (scene.meshes[i].hasPositions)
-                    mem.meshes += AiVector3D.size * scene.meshes[i].numVertices
-                if (scene.meshes[i].hasNormals)
-                    mem.meshes += AiVector3D.size * scene.meshes[i].numVertices
-                if (scene.meshes[i].hasTangentsAndBitangents)
-                    mem.meshes += AiVector3D.size * scene.meshes[i].numVertices * 2
-                for (a in 0 until AI_MAX_NUMBER_OF_COLOR_SETS)
-                    if (scene.meshes[i].hasVertexColors(a))
-                        mem.meshes += AiColor4D.size * scene.meshes[i].numVertices
-                    else break
-                for (a in 0 until AI_MAX_NUMBER_OF_TEXTURECOORDS)
-                    if (scene.meshes[i].hasTextureCoords(a))
-                        mem.meshes += AiVector3D.size * scene.meshes[i].numVertices
-                    else break
-                if (scene.meshes[i].hasBones) {
-                    for (p in 0 until scene.meshes[i].numBones) {
-                        mem.meshes += AiBone.size
-                        mem.meshes += scene.meshes[i].bones[p].numWeights * AiVertexWeight.size
-                    }
-                }
-                mem.meshes += (3 * Int.BYTES) * scene.meshes[i].numFaces
-            }
-            mem.total += mem.meshes
-            // add all embedded textures
-            for (i in 0 until scene.numTextures) {
-                val pc = scene.textures.values.elementAt(i)
-                mem.textures += AiTexture.size
-                mem.textures += with(pc.extent()) { if (y != 0) 4 * y * x else x }
-            }
-            mem.total += mem.textures
-            // add all animations
-            for (i in 0 until scene.numAnimations) {
-                val pc = scene.animations[i]
-                mem.animations += AiAnimation.size
-                // add all bone anims
-                for (a in 0 until pc.numChannels) {
-                    val pc2 = pc.channels[i]!!
-                    mem.animations += AiNodeAnim.size
-                    mem.animations += pc2.numPositionKeys * AiVectorKey.size
-                    mem.animations += pc2.numScalingKeys * AiVectorKey.size
-                    mem.animations += pc2.numRotationKeys * AiQuatKey.size
-                }
-            }
-            mem.total += mem.animations
-            // add all cameras and all lights
-            mem.cameras = AiCamera.size * scene.numCameras
-            mem.total += mem.cameras
-            mem.lights = AiLight.size * scene.numLights
-            mem.total += mem.lights
-
-            // add all nodes
-            addNodeWeight(mem::nodes, scene.rootNode)
-            mem.total += mem.nodes
-
-            // add all materials
-            for (i in 0 until scene.numMaterials)
-                mem.materials += AiMaterial.size
-            mem.total += mem.materials
-            return mem
-        }
+//    val memoryRequirements: AiMemoryInfo
+//        get() {
+//            val mem = AiMemoryInfo()
+//            val scene = impl.scene ?: return mem
+//            // return if we have no scene loaded
+//            mem.total = AiScene.size
+//            // add all meshes
+//            repeat(scene.numMeshes) { i ->
+//                mem.meshes += AiMesh.size
+//                if (scene.meshes[i].hasPositions)
+//                    mem.meshes += AiVector3D.size * scene.meshes[i].numVertices
+//                if (scene.meshes[i].hasNormals)
+//                    mem.meshes += AiVector3D.size * scene.meshes[i].numVertices
+//                if (scene.meshes[i].hasTangentsAndBitangents)
+//                    mem.meshes += AiVector3D.size * scene.meshes[i].numVertices * 2
+//                for (a in 0 until AI_MAX_NUMBER_OF_COLOR_SETS)
+//                    if (scene.meshes[i].hasVertexColors(a))
+//                        mem.meshes += AiColor4D.size * scene.meshes[i].numVertices
+//                    else break
+//                for (a in 0 until AI_MAX_NUMBER_OF_TEXTURECOORDS)
+//                    if (scene.meshes[i].hasTextureCoords(a))
+//                        mem.meshes += AiVector3D.size * scene.meshes[i].numVertices
+//                    else break
+//                if (scene.meshes[i].hasBones) {
+//                    for (p in 0 until scene.meshes[i].numBones) {
+//                        mem.meshes += AiBone.size
+//                        mem.meshes += scene.meshes[i].bones[p].numWeights * AiVertexWeight.size
+//                    }
+//                }
+//                mem.meshes += (3 * Int.BYTES) * scene.meshes[i].numFaces
+//            }
+//            mem.total += mem.meshes
+//            // add all embedded textures
+//            for (i in 0 until scene.numTextures) {
+//                val pc = scene.textures.values.elementAt(i)
+//                mem.textures += AiTexture.size
+//                mem.textures += with(pc.extent()) { if (y != 0) 4 * y * x else x }
+//            }
+//            mem.total += mem.textures
+//            // add all animations
+//            for (i in 0 until scene.numAnimations) {
+//                val pc = scene.animations[i]
+//                mem.animations += AiAnimation.size
+//                // add all bone anims
+//                for (a in 0 until pc.numChannels) {
+//                    val pc2 = pc.channels[i]!!
+//                    mem.animations += AiNodeAnim.size
+//                    mem.animations += pc2.numPositionKeys * AiVectorKey.size
+//                    mem.animations += pc2.numScalingKeys * AiVectorKey.size
+//                    mem.animations += pc2.numRotationKeys * AiQuatKey.size
+//                }
+//            }
+//            mem.total += mem.animations
+//            // add all cameras and all lights
+//            mem.cameras = AiCamera.size * scene.numCameras
+//            mem.total += mem.cameras
+//            mem.lights = AiLight.size * scene.numLights
+//            mem.total += mem.lights
+//
+//            // add all nodes
+//            addNodeWeight(mem::nodes, scene.rootNode)
+//            mem.total += mem.nodes
+//
+//            // add all materials
+//            for (i in 0 until scene.numMaterials)
+//                mem.materials += AiMaterial.size
+//            mem.total += mem.materials
+//            return mem
+//        }
 
     /** Enables "extra verbose" mode.
      *

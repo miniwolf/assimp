@@ -146,7 +146,7 @@ class Element(val keyToken: Token, parser: Parser) {
     }
 
     inline fun <reified T> parseVectorDataArray(out: ArrayList<T>) = when (T::class) {
-        AiColor4D::class -> parseColor
+        AiColor4D::class -> parseColor4DataArray(out as ArrayList<AiColor4D>)
         AiVector3D::class -> parseVec3DataArray(out as ArrayList<AiVector3D>)
         AiVector2D::class -> parseVec2DataArray(out as ArrayList<AiVector2D>)
         else -> throw Error()
@@ -266,6 +266,73 @@ class Element(val keyToken: Token, parser: Parser) {
 //        }
     }
 
+    fun parseColor4DataArray(out: ArrayList<AiColor4D>) {
+        out.clear()
+
+        if (tokens.isEmpty()) {
+            parseError("unexpected empty element", this)
+        }
+
+        if (tokens[0].isBinary) {
+            begin = tokens[0].begin
+            val end = tokens[0].end
+
+            readBinaryDataArrayHead(::begin, end, ::type, ::count)
+
+            if (count % 4 != 0) {
+                parseError("number of floats is not a multiple of four (4) (binary)", this)
+            }
+
+            if (count == 0) {
+                return
+            }
+
+            if (type != 'd' && type != 'f') {
+                parseError("expected float or double array (binary)", this)
+            }
+
+            val buff = readBinaryDataArray(type, count, ::begin, end)
+
+            assert(begin == end)
+            assert(buff.size == count * (if (type == 'd') 8 else 4))
+
+            val count4 = count / 4
+            out.ensureCapacity(count4)
+
+            if (type == 'd') {
+                val d = buff.asDoubleBuffer()
+                for (i in 0 until count4) {
+                    out += AiColor4D(d.get(), d.get(), d.get(), d.get())
+                }
+            } else if (type == 'f') {
+                val f = buff.asFloatBuffer()
+                for (i in 0 until count4) {
+                    out += AiColor4D(f.get(), f.get(), f.get(), f.get())
+                }
+            }
+
+            return
+        }
+
+        val dim = tokens[0].parseAsDim
+
+        out.ensureCapacity(dim.i)
+
+        val a = getRequiredElement(scope, "a", this)
+
+        if (a.tokens.size % 4 != 0) {
+            parseError("number of float is not a multiple of four (4)")
+        }
+        var i = 0
+        while (i < a.tokens.size) {
+            out += AiColor4D(
+                    x = a.tokens[i++].parseAsFloat,
+                    y = a.tokens[i++].parseAsFloat,
+                    z = a.tokens[i++].parseAsFloat,
+                    w = a.tokens[i++].parseAsFloat
+            )
+        }
+    }
 
     fun parseVec2DataArray(out: ArrayList<AiVector2D>) {
         out.clear()
@@ -493,7 +560,7 @@ class Scope(parser: Parser, topLevel: Boolean = false) {
     }
 
     operator fun get(index: String) = elements[index]?.get(0)
-    fun getArray(index: String) = elements[index]!!
+    fun getArray(index: String) = elements[index] ?: ArrayList()
 
     fun findElementCaseInsensitive(elementName: String) = elements[elementName.toLowerCase()]
 

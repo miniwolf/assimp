@@ -95,7 +95,7 @@ object ValidateDSProcess : BaseProcess() {
 
         // validate all textures
         if (scene.numTextures > 0)
-            doValidation(scene.textures.values.toCollection(ArrayList()), scene.numTextures, "textures", "numTextures")
+            doValidation(scene.textures, scene.numTextures, "textures", "numTextures")
         else if (scene.textures.isNotEmpty())
             reportError("AiScene.textures is not empty although there are no textures")
 

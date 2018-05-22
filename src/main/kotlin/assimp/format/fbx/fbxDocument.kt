@@ -90,12 +90,13 @@ class LazyObject(val id: Long, val element: Element, val doc: Document) {
         /*  small fix for binary reading: binary fbx files don't use prefixes such as Model:: in front of their names.
             The loading code expects this at many places, though!
             so convert the binary representation (a 0x0001) to the double colon notation. */
-        if (tokens[1].isBinary)
+        if (tokens[1].isBinary) {
             for (i in name.indices) {
                 if (name[i].i == 0x0 && name[i + 1].i == 0x1)
                     name = name.substring(i + 2) + "::" + name.substring(0, i)
             }
-        else name = name.trimNUL()
+        }
+        //else name = name.trimNUL()
 
         val classtag = tokens[2].parseAsString
 
@@ -433,7 +434,7 @@ class Texture(id: Long, element: Element, doc: Document, name: String) : Object(
             ?: AiVector2D(1)
 
     val type = element.scope["Type"]?.get(0)?.parseAsString ?: ""
-    val relativeFileName = element.scope["RelativeFileName"]?.get(0)?.parseAsString ?: ""
+    val relativeFileName = element.scope["RelativeFilename"]?.get(0)?.parseAsString ?: ""
     val fileName = element.scope["FileName"]?.get(0)?.parseAsString ?: ""
     val alphaSource = element.scope["Texture_Alpha_Source"]?.get(0)?.parseAsString ?: ""
     val props = getPropertyTable(doc, "Texture.FbxFileTexture", element, element.scope)
@@ -521,7 +522,7 @@ class Video(id: Long, element: Element, doc: Document, name: String) : Object(id
                         content = ByteArray(len, { buffer.get(data + 5 + it) })
                     }
                 }
-            } catch (runtimeError: Exception) {
+            } catch (runtimeError: Error) {
                 //we don´t need the content data for contents that has already been loaded
             }
         }
@@ -745,7 +746,7 @@ class AnimationLayer(id: Long, element: Element, name: String, val doc: Document
         for (con in conns) {
 
             // link should not go to a property
-            if (con.prop.isEmpty()) continue
+            if (!con.prop.isEmpty()) continue
 
             val ob = con.sourceObject
             if (ob == null) {

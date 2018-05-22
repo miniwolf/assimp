@@ -279,9 +279,6 @@ class MeshGeometry(id: Long, element: Element, name: String, doc: Document) : Ge
                     logger.error("ignoring additional normal layer")
                     return
                 }
-                if (normals.isEmpty()) {
-                    return
-                }
                 readVertexDataNormals(normals, source, mappingInformationType, referenceInformationType)
             }
             "LayerElementTangent" -> {
